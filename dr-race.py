@@ -40,9 +40,8 @@ def get_user_score(user):
     return None
 
 
-sexy = [x for x in uid_names]
 # iterate through the users and put the scores in to `results`
-results = [get_user_score(x) for x in sexy[:10]]
+results = [get_user_score(x) for x in uid_names]
 
 
 conn = mysql.connector.connect(
