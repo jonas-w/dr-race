@@ -1,8 +1,11 @@
+import warnings
+warnings.filterwarnings("ignore") # i know that skipping ssl verify is bad
 import requests, json, mysql.connector
 import time, os
 from bokeh.plotting import figure, save, output_file
-
+from prettytable import PrettyTable
 # load all the users i'm going to "track"
+import multiprocessing as mp
 
 # connect to MySQL but using an environment variable for the password ( ͡°( ͡° ͜ʖ( ͡° ͜ʖ͡°)ʖ ͡°) ͡°)
 conn = mysql.connector.connect(
@@ -22,10 +25,10 @@ conn.close()
 
 
 def get_user_score(user):
-    time.sleep(2)  # sleep to not really ddos devRant api
+#    time.sleep(2)  # sleep to not really ddos devRant api / maybe later
     print(user)
     # API request the app=3 is required by devRant API why? idk only 3 works
-    user_request = requests.get("https://devrant.com/api/users/" + str(user) + "?app=3")
+    user_request = requests.get("https://devrant.com/api/users/" + str(user) + "?app=3",verify=False) # skip ssl verify, because it sometimes says that the cert would be self signed??
 
     # error handling without panicking if something fails
     if user_request.status_code == 200:
@@ -39,9 +42,12 @@ def get_user_score(user):
         print(user_request.status_code)
     return None
 
-
+# Currently trying with multiprocessing
+nproc = mp.cpu_count()
 # iterate through the users and put the scores in to `results`
-results = [get_user_score(x) for x in uid_names]
+#results = [get_user_score(x) for x in uid_names]
+with mp.Pool(processes=nproc) as mpP:
+    results = mpP.map(get_user_score,[x for x in uid_names])
 
 
 conn = mysql.connector.connect(
@@ -93,6 +99,17 @@ for x in cursor:
         ys[x[1]] = []
     xs[x[1]].append(x[0])
     ys[x[1]].append(x[2])
+
+# Output the Score Difference since the start of logging
+cursor.execute("SELECT (SELECT name FROM uid_name WHERE uid_name.uid = race.uid) as Name,(SELECT score FROM race as t WHERE t.time = MAX(race.time) AND t.uid = race.uid) - (SELECT score FROM race as tm WHERE tm.time = MIN(race.time) AND tm.uid = race.uid) as score_diff FROM race GROUP BY uid ORDER BY score_diff DESC;")
+pt = PrettyTable()
+pt.field_names = ["Username","Score Difference"]
+for x in cursor:
+    pt.add_row(x)
+
+with open("/var/www/dr-race/!score_diff.txt","w+") as sdt:
+    sdt.write(pt.get_string())
+
 
 # we don't need the database anymore so goodbye
 cursor.close()
